@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 using namespace std;
 
@@ -17,7 +18,7 @@ public:
     time_t arrivalTime;
     int waitingTime;
     bool isEmergency;
-
+    //Конструктор
     Car(int carId, bool emergency = false) : id(carId), arrivalTime(time(nullptr)), waitingTime(0), isEmergency(emergency) {}
 };
 
@@ -48,7 +49,7 @@ public:
         }
         return nullptr;
     }
-
+    //const - только для чтения 
     bool isEmpty() const {
         return cars.empty();
     }
@@ -77,7 +78,7 @@ public:
     }
 };
 
-// Класс для перекрестка
+// Перекресток
 class Intersection {
 private:
     int id;
@@ -91,10 +92,10 @@ private:
 
 public:
     Intersection(int intersectionId, int lightDur) : id(intersectionId), trafficLight(true), 
-                                                  lightDuration(5), lightCounter(0),
+                                                  lightDuration(lightDur), lightCounter(0),
                                                   totalCarsPassed(0), totalWaitingTime(0),
                                                   idleCars(0) {
-        // Создаем 4 прямые полосы (N, S, E, W)
+        // Создаем 4 прямые полосы
         lanes.push_back(new Lane(10, "North"));
         lanes.push_back(new Lane(10, "South"));
         lanes.push_back(new Lane(10, "East"));
@@ -106,7 +107,7 @@ public:
         lanes.push_back(new Lane(5, "East", true));
         lanes.push_back(new Lane(5, "West", true));
     }
-
+    //Деструктор (удаляет)
     ~Intersection() {
         for (auto lane : lanes) {
             delete lane;
@@ -162,7 +163,7 @@ public:
             turnCars.pop();
         }
     }
-
+    //добавляем машины
     void addCar(int direction, bool isTurn = false, bool emergency = false) {
         int laneIndex = direction + (isTurn ? 4 : 0);
         if (laneIndex >= 0 && laneIndex < lanes.size()) {
@@ -173,35 +174,35 @@ public:
         }
     }
 
-    void displayStatus(int currentTime) const {
-        cout << "=== Перекресток " << id << " ===" << endl;
-        cout << "Время: " << currentTime << " сек" << endl;
-        cout << "Светофор: " << (trafficLight ? "ЗЕЛЕНЫЙ" : "КРАСНЫЙ") << endl;
+    void displayStatus(int currentTime, ostream& out = cout) const {
+        out << "=== Перекресток " << id << " ===" << endl;
+        out << "Время: " << currentTime << " сек" << endl;
+        out << "Светофор: " << (trafficLight ? "ЗЕЛЕНЫЙ" : "КРАСНЫЙ") << endl;
         
-        cout << "Прямые полосы:" << endl;
+        out << "Прямые полосы:" << endl;
         for (int i = 0; i < 4; ++i) {
-            cout << lanes[i]->getDirection() << ": " << lanes[i]->getCarCount() << " машин" << endl;
+            out << lanes[i]->getDirection() << ": " << lanes[i]->getCarCount() << " машин" << endl;
         }
         
-        cout << "Полосы для поворотов:" << endl;
+        out << "Полосы для поворотов:" << endl;
         for (int i = 4; i < 8; ++i) {
-            cout << lanes[i]->getDirection() << ": " << lanes[i]->getCarCount() << " машин" << endl;
+            out << lanes[i]->getDirection() << ": " << lanes[i]->getCarCount() << " машин" << endl;
         }
-        cout << endl;
+        out << endl;
     }
 
-    void generateReport() const {
-        cout << "=== Отчет по перекрестку " << id << " ===" << endl;
-        cout << "Всего машин проехало: " << totalCarsPassed << endl;
+    void generateReport(ostream& out = cout) const {
+        out << "=== Отчет по перекрестку " << id << " ===" << endl;
+        out << "Всего машин проехало: " << totalCarsPassed << endl;
         if (totalCarsPassed > 0) {
-            cout << "Среднее время ожидания: " 
+            out << "Среднее время ожидания: " 
                  << fixed << setprecision(2) 
                  << (double)totalWaitingTime / totalCarsPassed << " сек" << endl;
         } else {
-            cout << "Среднее время ожидания: 0 сек" << endl;
+            out << "Среднее время ожидания: 0 сек" << endl;
         }
-        cout << "Количество простаивавших машин (>5 сек): " << idleCars << endl;
-        cout << endl;
+        out << "Количество простаивавших машин (>5 сек): " << idleCars << endl;
+        out << endl;
     }
 };
 
@@ -211,10 +212,16 @@ private:
     vector<Intersection*> intersections;
     int simulationTime;
     int carSpawnRate;
+    ofstream logFile;
 
 public:
     Simulation(int intersectionsCount, int simTime, int spawnRate) : 
               simulationTime(simTime), carSpawnRate(spawnRate) {
+        logFile.open("simulation_report.txt");
+        if (!logFile.is_open()) {
+            cerr << "Не удалось открыть файл для записи!" << endl;
+        }
+        
         for (int i = 0; i < intersectionsCount; ++i) {
             intersections.push_back(new Intersection(i + 1, 10 + rand() % 10));
         }
@@ -224,9 +231,17 @@ public:
         for (auto intersection : intersections) {
             delete intersection;
         }
+        if (logFile.is_open()) {
+            logFile.close();
+        }
     }
 
     void run() {
+        logFile << "=== Начало симуляции ===" << endl;
+        logFile << "Количество перекрестков: " << intersections.size() << endl;
+        logFile << "Время симуляции: " << simulationTime << " сек" << endl;
+        logFile << "Частота появления машин: каждые " << carSpawnRate << " сек" << endl << endl;
+
         for (auto intersection : intersections) {
             for (int i = 0; i < 5; ++i) {
                 intersection->addCar(rand() % 4, rand() % 4 == 0);
@@ -247,9 +262,10 @@ public:
             for (auto intersection : intersections) {
                 intersection->update();
                 
-                //каждые 2 секунды выводим то, что происходит
+                // каждые 2 секунды выводим то, что происходит
                 if (time % 2 == 0) {
-                    intersection->displayStatus(time);
+                    intersection->displayStatus(time, cout);  // Вывод в консоль
+                    intersection->displayStatus(time, logFile); // Запись в файл
                     this_thread::sleep_for(chrono::milliseconds(100));
                 }
             }
@@ -260,8 +276,10 @@ public:
 
         // Генерация отчетов
         cout << "\n=== Итоговые отчеты ===" << endl;
+        logFile << "\n=== Итоговые отчеты ===" << endl;
         for (auto intersection : intersections) {
-            intersection->generateReport();
+            intersection->generateReport(cout);  // Вывод в консоль
+            intersection->generateReport(logFile); // Запись в файл
         }
     }
 };
@@ -272,15 +290,27 @@ int main() {
     cout << "Симуляция транспортной сети" << endl;
     cout << "Введите количество перекрестков: ";
     int intersections;
-    cin >> intersections;
-    
+    while (!(cin >> intersections) || intersections < 1 || intersections > 10000) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Введите количество перекрестков: " << endl;
+    }
     cout << "Введите время симуляции (сек): ";
     int simTime;
-    cin >> simTime;
+    while (!(cin >> simTime) || simTime < 1 || simTime > 10000) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Введите время симуляции (сек): " << endl;
+    }
     
-    cout << "Введите частоту появления машин (сек): ";
+
     int spawnRate;
-    cin >> spawnRate;
+    cout << "Введите частоту появления машин (сек):";
+    while (!(cin >> spawnRate) || spawnRate < 1 || spawnRate > 10000) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Введите частоту появления машин (сек): " << endl;
+    }
     
     Simulation sim(intersections, simTime, spawnRate);
     sim.run();
